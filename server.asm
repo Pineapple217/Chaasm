@@ -1,16 +1,20 @@
 format ELF64 executable
 
 SYS_write equ 1
-SYS_exit equ 60
+SYS_close equ 3
 SYS_socket equ 41
 SYS_accept equ 43
 SYS_bind equ 49
 SYS_listen equ 50
-SYS_close equ 3
+SYS_setsockopt equ 54
+SYS_exit equ 60
 
 AF_INET equ 2
 SOCK_STREAM equ 1
 INADDR_ANY equ 0
+
+SOL_SOCKET equ 65535
+SO_REUSEADDR equ 2
 
 STDOUT equ 1
 STDERR equ 2
@@ -67,6 +71,17 @@ macro socket domain, type, protocol
     syscall
 }
 
+macro setsockopt sockfd, level, optname, optval, optlen
+{
+    mov rax, SYS_setsockopt
+    mov rdi, sockfd
+    mov rsi, level
+    mov rdx, optname
+    mov r10, optval
+    mov r8, optlen
+    syscall
+}
+
 ;; int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 macro bind sockfd, addr, addrlen
 {
@@ -107,6 +122,9 @@ main:
     ; [] = derefrence
     mov qword [sockfd], rax
 
+    ; Set SO_REUSEADDR option
+    setsockopt [sockfd], SOL_SOCKET, SO_REUSEADDR, 1, 8
+
     write STDOUT, bind_trace_msg, bind_trace_msg_len
     mov word [servaddr.sin_family], AF_INET
     ; 36895 is byte reversed 8080
@@ -132,6 +150,7 @@ next_request:
 
     write [connfd], response, response_len
 
+    close [connfd]
     jmp next_request
 
     write STDOUT, ok_msg, ok_msg_len
@@ -176,6 +195,7 @@ response db "HTTP/1.1 200 OK", 13, 10
          db "Connection: close", 13, 10
          db 13, 10
          db "<h1>Hello from flat assembler!</h1>", 10
+         db 0
 response_len = $ - response
 
 start db "INFO: Starting Web Server!", 10
